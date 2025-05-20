@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <zephyr/kernel.h>
+#include <zephyr/random/random.h>
 #include "animation.h"
 
 LV_IMG_DECLARE(hammerbeam1);
@@ -66,10 +67,22 @@ const lv_img_dsc_t *anim_imgs[] = {
     &hammerbeam30,
 };
 
+void shuffle_imgs(const lv_img_dsc_t **array, size_t n) {
+    if (n > 1) {
+        for (size_t i = n - 1; i > 0; i--) {
+            size_t j = sys_rand32_get() % (i + 1);
+            const lv_img_dsc_t *tmp = array[j];
+            array[j] = array[i];
+            array[i] = tmp;
+        }
+    }
+}
+
 void draw_animation(lv_obj_t *canvas) {
     lv_obj_t *art = lv_animimg_create(canvas);
     lv_obj_center(art);
-
+    
+    shuffle_imgs(anim_imgs, ARRAY_SIZE(anim_imgs));
     lv_animimg_set_src(art, (const void **)anim_imgs, 30);
     lv_animimg_set_duration(art, 1800000);
     lv_animimg_set_repeat_count(art, LV_ANIM_REPEAT_INFINITE);
