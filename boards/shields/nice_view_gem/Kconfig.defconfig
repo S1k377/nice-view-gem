@@ -40,12 +40,16 @@ config NICE_VIEW_GEM_ANIMATION
     default y
 
 config NICE_VIEW_GEM_ANIMATION_FRAME_MS
-    int "Milliseconds per frame for the base animation (campfire / starry night)"
+    int "Milliseconds per frame for the campfire (left half, layer 0)"
     default 150
 
 config NICE_VIEW_GEM_ANIMATION_LAYER_FRAME_MS
-    int "Milliseconds per frame for the non-base-layer animation (spells, left half)"
-    default 110
+    int "Milliseconds per frame for the spells (left half, any other layer)"
+    default 170
+
+config NICE_VIEW_GEM_ANIMATION_PERIPHERAL_FRAME_MS
+    int "Milliseconds per frame for the starry night (right half)"
+    default 250
 
 config NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE
     bool "Freeze the animation while the keyboard half is idle"

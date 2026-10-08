@@ -51,7 +51,10 @@ def sprite(rows, x, y):
 def _c_frames(frames, name):
     out = []
     for i, f in enumerate(frames, 1):
-        stored = np.rot90(f, k=-1)            # portrait -> stored 140x68 (display rotates it back)
+        # Same convention as the original hammerbeam art and the rest of the shield:
+        # background = palette index 1 (white by default, black with
+        # CONFIG_NICE_VIEW_WIDGET_INVERTED=y), drawing = index 0.
+        stored = np.rot90(~f, k=-1)           # portrait -> stored 140x68 (display rotates it back)
         rows, cols = stored.shape
         rb = (cols + 7) // 8
         packed = np.packbits(np.pad(stored, ((0, 0), (0, rb * 8 - cols))).astype(np.uint8), axis=1)

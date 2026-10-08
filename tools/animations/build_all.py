@@ -21,8 +21,8 @@ PREVIEW = os.path.join(HERE, "preview")
 # name, module, preview frame delay (ms)
 ANIMATIONS = [
     ("campfire", make_campfire, 150),   # left half, base layer
-    ("gaming", make_gaming, 110),       # left half, any other layer
-    ("night", make_night, 150),         # right half
+    ("gaming", make_gaming, 170),       # left half, any other layer
+    ("night", make_night, 250),         # right half
 ]
 
 

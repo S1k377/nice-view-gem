@@ -45,7 +45,7 @@ static const struct anim_set layer_set = {
 static const struct anim_set base_set = {
     .frames = night_imgs,
     .count = NIGHT_FRAME_COUNT,
-    .frame_ms = CONFIG_NICE_VIEW_GEM_ANIMATION_FRAME_MS,
+    .frame_ms = CONFIG_NICE_VIEW_GEM_ANIMATION_PERIPHERAL_FRAME_MS,
 };
 #endif
 
