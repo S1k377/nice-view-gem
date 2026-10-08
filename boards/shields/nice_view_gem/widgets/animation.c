@@ -1,92 +1,165 @@
-#include <stdlib.h>
 #include <zephyr/kernel.h>
-#include <zephyr/random/random.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+#include <zmk/display.h>
+#include <zmk/event_manager.h>
+
 #include "animation.h"
 
-LV_IMG_DECLARE(hammerbeam1);
-LV_IMG_DECLARE(hammerbeam2);
-LV_IMG_DECLARE(hammerbeam3);
-LV_IMG_DECLARE(hammerbeam4);
-LV_IMG_DECLARE(hammerbeam5);
-LV_IMG_DECLARE(hammerbeam6);
-LV_IMG_DECLARE(hammerbeam7);
-LV_IMG_DECLARE(hammerbeam8);
-LV_IMG_DECLARE(hammerbeam9);
-LV_IMG_DECLARE(hammerbeam10);
-LV_IMG_DECLARE(hammerbeam11);
-LV_IMG_DECLARE(hammerbeam12);
-LV_IMG_DECLARE(hammerbeam13);
-LV_IMG_DECLARE(hammerbeam14);
-LV_IMG_DECLARE(hammerbeam15);
-LV_IMG_DECLARE(hammerbeam16);
-LV_IMG_DECLARE(hammerbeam17);
-LV_IMG_DECLARE(hammerbeam18);
-LV_IMG_DECLARE(hammerbeam19);
-LV_IMG_DECLARE(hammerbeam20);
-LV_IMG_DECLARE(hammerbeam21);
-LV_IMG_DECLARE(hammerbeam22);
-LV_IMG_DECLARE(hammerbeam23);
-LV_IMG_DECLARE(hammerbeam24);
-LV_IMG_DECLARE(hammerbeam25);
-LV_IMG_DECLARE(hammerbeam26);
-LV_IMG_DECLARE(hammerbeam27);
-LV_IMG_DECLARE(hammerbeam28);
-LV_IMG_DECLARE(hammerbeam29);
-LV_IMG_DECLARE(hammerbeam30);
+#define ANIM_IS_CENTRAL (!IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL))
 
-const lv_img_dsc_t *anim_imgs[] = {
-    &hammerbeam1,
-    &hammerbeam2,
-    &hammerbeam3,
-    &hammerbeam4,
-    &hammerbeam5,
-    &hammerbeam6,
-    &hammerbeam7,
-    &hammerbeam8,
-    &hammerbeam9,
-    &hammerbeam10,
-    &hammerbeam11,
-    &hammerbeam12,
-    &hammerbeam13,
-    &hammerbeam14,
-    &hammerbeam15,
-    &hammerbeam16,
-    &hammerbeam17,
-    &hammerbeam18,
-    &hammerbeam19,
-    &hammerbeam20,
-    &hammerbeam21,
-    &hammerbeam22,
-    &hammerbeam23,
-    &hammerbeam24,
-    &hammerbeam25,
-    &hammerbeam26,
-    &hammerbeam27,
-    &hammerbeam28,
-    &hammerbeam29,
-    &hammerbeam30,
+#if ANIM_IS_CENTRAL
+#include <zmk/keymap.h>
+#include <zmk/events/layer_state_changed.h>
+#include "../assets/campfire.h"
+#include "../assets/gaming.h"
+#else
+#include "../assets/night.h"
+#endif
+
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE)
+#include <zmk/activity.h>
+#include <zmk/events/activity_state_changed.h>
+#endif
+
+struct anim_set {
+    const lv_img_dsc_t *const *frames;
+    uint16_t count;
+    uint16_t frame_ms;
 };
 
-void shuffle_imgs(const lv_img_dsc_t **array, size_t n) {
-    if (n > 1) {
-        for (size_t i = n - 1; i > 0; i--) {
-            size_t j = sys_rand32_get() % (i + 1);
-            const lv_img_dsc_t *tmp = array[j];
-            array[j] = array[i];
-            array[i] = tmp;
-        }
+#if ANIM_IS_CENTRAL
+static const struct anim_set base_set = {
+    .frames = campfire_imgs,
+    .count = CAMPFIRE_FRAME_COUNT,
+    .frame_ms = CONFIG_NICE_VIEW_GEM_ANIMATION_FRAME_MS,
+};
+static const struct anim_set layer_set = {
+    .frames = gaming_imgs,
+    .count = GAMING_FRAME_COUNT,
+    .frame_ms = CONFIG_NICE_VIEW_GEM_ANIMATION_LAYER_FRAME_MS,
+};
+#else
+static const struct anim_set base_set = {
+    .frames = night_imgs,
+    .count = NIGHT_FRAME_COUNT,
+    .frame_ms = CONFIG_NICE_VIEW_GEM_ANIMATION_FRAME_MS,
+};
+#endif
+
+static lv_obj_t *art;
+static const struct anim_set *current;
+static uint16_t frame;
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION)
+static lv_timer_t *timer;
+#endif
+static bool active = true;
+
+static void show_frame(void) { lv_img_set_src(art, current->frames[frame]); }
+
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION)
+static void next_frame(lv_timer_t *t) {
+    ARG_UNUSED(t);
+    frame = (frame + 1) % current->count;
+    show_frame();
+}
+#endif
+
+/* Run the timer only while the half is active; it is the only thing that wakes the display. */
+static void update_timer(void) {
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION)
+    if (timer == NULL) {
+        return;
     }
+    lv_timer_set_period(timer, current->frame_ms);
+    if (active) {
+        lv_timer_reset(timer);
+        lv_timer_resume(timer);
+    } else {
+        lv_timer_pause(timer);
+    }
+#endif
 }
 
-void draw_animation(lv_obj_t *canvas) {
-    lv_obj_t *art = lv_animimg_create(canvas);
-    lv_obj_center(art);
-    
-    shuffle_imgs(anim_imgs, ARRAY_SIZE(anim_imgs));
-    lv_animimg_set_src(art, (const void **)anim_imgs, 30);
-    lv_animimg_set_duration(art, 1800000);
-    lv_animimg_set_repeat_count(art, LV_ANIM_REPEAT_INFINITE);
-    lv_animimg_start(art);
+#if ANIM_IS_CENTRAL
+static void select_set(const struct anim_set *set) {
+    if (set == current) {
+        return;
+    }
+    current = set;
+    frame = 0;
+    show_frame();
+    update_timer();
+}
 
+/**
+ * Layer: swap image sets only when the highest active layer crosses 0 <-> non-zero
+ **/
+
+struct anim_layer_state {
+    uint8_t layer;
+};
+
+static void anim_layer_update_cb(struct anim_layer_state state) {
+    select_set(state.layer == 0 ? &base_set : &layer_set);
+}
+
+static struct anim_layer_state anim_layer_get_state(const zmk_event_t *eh) {
+    ARG_UNUSED(eh);
+    return (struct anim_layer_state){.layer = zmk_keymap_highest_layer_active()};
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_anim_layer, struct anim_layer_state, anim_layer_update_cb,
+                            anim_layer_get_state)
+ZMK_SUBSCRIPTION(widget_anim_layer, zmk_layer_state_changed);
+#endif /* ANIM_IS_CENTRAL */
+
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE)
+/**
+ * Activity: freeze on the current frame when idle/asleep, resume on the next keypress
+ **/
+
+struct anim_activity_state {
+    bool active;
+};
+
+static void anim_activity_update_cb(struct anim_activity_state state) {
+    if (state.active == active) {
+        return;
+    }
+    active = state.active;
+    update_timer();
+}
+
+static struct anim_activity_state anim_activity_get_state(const zmk_event_t *eh) {
+    const struct zmk_activity_state_changed *ev = as_zmk_activity_state_changed(eh);
+    enum zmk_activity_state s = (ev != NULL) ? ev->state : zmk_activity_get_state();
+    return (struct anim_activity_state){.active = (s == ZMK_ACTIVITY_ACTIVE)};
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_anim_activity, struct anim_activity_state,
+                            anim_activity_update_cb, anim_activity_get_state)
+ZMK_SUBSCRIPTION(widget_anim_activity, zmk_activity_state_changed);
+#endif /* CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE */
+
+void draw_animation(lv_obj_t *parent) {
+    art = lv_img_create(parent);
     lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    current = &base_set;
+    frame = 0;
+    show_frame();
+
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION)
+    timer = lv_timer_create(next_frame, current->frame_ms, NULL);
+#endif
+
+#if ANIM_IS_CENTRAL
+    widget_anim_layer_init();
+#endif
+#if IS_ENABLED(CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE)
+    widget_anim_activity_init();
+#endif
 }
