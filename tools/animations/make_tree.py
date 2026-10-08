@@ -15,20 +15,20 @@ rng = random.Random(5)
 
 # limbs: (x0, y0, x1, y1, width at base, width at tip)
 LIMBS = [
-    (34, GROUND, 34, 84, 11, 7.5),     # trunk
-    (34, 90, 14, 62, 7, 3.5),          # big left limb
-    (34, 88, 55, 60, 7, 3.5),          # big right limb
-    (34, 86, 31, 50, 6, 3),            # centre leader
-    (20, 70, 8, 58, 3.2, 1.6),
-    (49, 68, 61, 57, 3.2, 1.6),
-    (32, 62, 22, 40, 3.2, 1.6),
-    (33, 60, 46, 38, 3.2, 1.6),
+    (31, 96, 5, 70, 9, 4),             # great limbs spreading almost sideways
+    (37, 95, 63, 69, 9, 4),
+    (30, 94, 15, 57, 7, 3.5),
+    (38, 93, 53, 56, 7, 3.5),
+    (34, 92, 34, 50, 7, 3.5),
+    (10, 75, -2, 66, 3.5, 2),
+    (58, 74, 70, 65, 3.5, 2),
 ]
 
-# leaf clumps (x, y, radius), placed by hand for a broad oak-like crown
-CLUMPS = [(34, 18, 11), (20, 25, 10), (48, 25, 10), (9, 40, 8.5), (59, 40, 8.5),
-          (27, 36, 10), (42, 35, 10), (16, 51, 9.5), (52, 50, 9.5), (34, 50, 9),
-          (7, 60, 6.5), (61, 60, 6.5), (24, 63, 7.5), (44, 63, 7.5)]
+# a broad, flat-topped crown wider than the screen: leaf clumps (x, y, radius)
+CLUMPS = [(34, 17, 10), (20, 21, 10), (48, 21, 10), (6, 29, 9.5), (62, 29, 9.5),
+          (-2, 42, 9), (70, 42, 9), (14, 37, 10), (54, 37, 10), (27, 32, 10), (41, 32, 10),
+          (3, 56, 9), (65, 56, 9), (19, 51, 10), (49, 51, 10), (34, 46, 10),
+          (10, 66, 7.5), (58, 66, 7.5), (25, 63, 8), (43, 63, 8)]
 CLUMPS = [(x, y, r, rng.uniform(0, TAU)) for x, y, r in CLUMPS]
 CLUMPS.sort(key=lambda c: c[1])            # draw top ones first, lower ones in front
 
@@ -54,7 +54,7 @@ def wind(t):
 
 def sway(x, y, t, ph=0.0):
     """Horizontal push for a point at height y: grows with height, travels as a wave."""
-    k = max(0.0, (GROUND - y) / 100.0) ** 1.6
+    k = max(0.0, (GROUND - y) / 110.0) ** 1.8
     return x + k * (3.6 * wind(t) - 1.2 + 1.6 * math.sin(TAU * t * 2 / N - y * 0.06 + ph))
 
 
@@ -70,9 +70,27 @@ def frame(t):
             ya, yb = y0 + (y1 - y0) * a, y0 + (y1 - y0) * b
             xa, xb = sway(x0 + (x1 - x0) * a, ya, t), sway(x0 + (x1 - x0) * b, yb, t)
             wood |= thick_line(xa, ya, xb, yb, w0 + (w1 - w0) * (a + b) / 2)
-    # roots flaring into the ground
-    for rx, s in ((22, -1), (46, 1), (28, -1), (40, 1)):
-        wood |= thick_line(34 + s * 4, GROUND - 7, rx, GROUND + 1, 3.5)
+    # massive trunk that curves out into separate roots at the base
+    TOP = 90
+    trunk = np.zeros((H, W), bool)
+    grooves = np.zeros((H, W), bool)
+    for y in range(TOP, GROUND + 1):
+        f = (y - TOP) / (GROUND - TOP)
+        hw = 8.5 + 22 * f ** 3.2
+        cx = sway(34, y, t)
+        trunk[y, max(0, int(round(cx - hw))):min(W, int(round(cx + hw)) + 1)] = True
+        # bark: long wavy grooves following the trunk, fanning out into the roots
+        for rel in (-0.62, -0.25, 0.12, 0.5):
+            gx = cx + rel * hw + 0.8 * math.sin(y * 0.35 + rel * 5)
+            if (y + int(rel * 10)) % 9 < 7:
+                grooves[y, int(round(gx))] = True
+        # gaps between the roots near the ground
+        if f > 0.55:
+            for rel in (-0.55, 0.0, 0.55):
+                gx = cx + rel * hw
+                gw = (f - 0.55) * 7
+                trunk[y, max(0, int(round(gx - gw / 2))):int(round(gx + gw / 2)) + 1] = False
+    wood |= trunk
 
     # canopy: each clump gets a crisp outline and leafy texture that is denser where the
     # light hits (upper left); lower clumps overlap the ones behind them
@@ -91,8 +109,7 @@ def frame(t):
         canopy &= ~(c & disc(sx, cy, r - 1.0) & ~disc(sx, cy, r - 2.0))   # gap inside it
         canopy_area |= c
 
-    # bark: grooves down the trunk and limbs
-    bark = wood & ((((xx * 2 + yy // 4) % 6) == 0) & erode(erode(wood)))
+    bark = grooves & trunk & erode(trunk)
     img &= ~dilate(wood | canopy_area)
     img |= wood & ~bark
     img &= ~canopy_area
@@ -104,7 +121,7 @@ def frame(t):
     img |= (yy > GROUND + 2) & (BAYER < 0.08)
     img |= wood & (yy >= GROUND - 1) & (yy <= GROUND)
     for gx, gh in GRASS:
-        if 27 < gx < 41:
+        if trunk[GROUND - 2, gx] or trunk[GROUND - 2, max(0, gx - 2)] or trunk[GROUND - 2, min(W - 1, gx + 2)]:
             continue
         lean = gh * 0.5 * wind(t) + 0.8 * math.sin(TAU * t * 2 / N + gx * 0.3)
         img |= thick_line(gx, GROUND, gx + lean, GROUND - gh, 1)

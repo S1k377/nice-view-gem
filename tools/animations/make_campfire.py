@@ -8,7 +8,7 @@ from nvlib import W, H, xx, yy, BAYER, disc, export
 N = 32
 FRAME_MS = 150
 TAU = 2 * math.pi
-FX, FIRE_BASE = 34, 114
+FX, FIRE_BASE = 34, 118
 rng = random.Random(7)
 STARS = [(x, y, ph) for x, y, ph in ((rng.randrange(3, W - 3), rng.randrange(4, 62), rng.random())
                                      for _ in range(20))
@@ -105,12 +105,12 @@ def frame(t):
     img |= tongue(FX, 4, 12 + 3 * math.sin(TAU * p * 3), 1.8 * math.sin(TAU * p * 2), TAU * p * 2) & core
 
     # two crossed logs in front, then a short log lying across the bottom
-    log(img, 9, 125, 47, 104, 9, rings=(True, False))
-    log(img, 59, 125, 21, 104, 9, rings=(True, False))
-    log(img, 17, 131, 51, 131, 7)
+    log(img, 14, 127, 44, 109, 6, rings=(True, False))
+    log(img, 54, 127, 24, 109, 6, rings=(True, False))
+    log(img, 21, 131, 47, 131, 5)
 
     # embers glowing between the logs
-    for i, (ex, ey) in enumerate(((28, 121), (34, 123), (40, 121), (31, 126), (37, 126))):
+    for i, (ex, ey) in enumerate(((29, 124), (34, 126), (39, 124), (31, 128), (37, 128))):
         if math.sin(TAU * (p * 3 + i * 0.37)) > -0.3:
             img[ey, ex:ex + 2] = True
 
