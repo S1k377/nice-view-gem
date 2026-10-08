@@ -8,7 +8,8 @@ if(CONFIG_ZMK_DISPLAY AND CONFIG_NICE_VIEW_WIDGET_STATUS)
 
   zephyr_library_sources(widgets/animation.c)
 
-  # Slideshow frames, on both halves.
+  # Compressed animation frames (decoder + slideshow, on both halves).
+  zephyr_library_sources(assets/nv_anim.c)
   zephyr_library_sources(assets/campfire.c)
   zephyr_library_sources(assets/night.c)
   zephyr_library_sources(assets/astronaut.c)

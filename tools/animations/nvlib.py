@@ -1,11 +1,13 @@
 """Shared helpers for nice!view slideshow frames (68x140 portrait, 1-bit).
 
 Frames are numpy bool arrays shaped (140, 68), True = white pixel.
-Each animation is exported as <name>.c/.h containing:
-  - static frame descriptors (stored rotated 90deg CW as 140x68 INDEXED_1BIT,
-    the same layout as the original hammerbeam art.c)
-  - const lv_img_dsc_t *const <name>_imgs[]   the frame table, kept in flash
-  - <NAME>_FRAME_COUNT in the header
+
+Each animation is exported as <name>.c/.h holding one `struct nv_anim` (see
+assets/nv_anim.h). Frames are stored rotated 90deg CW as 140x68 1-bit rows of 18 bytes
+(the same pixel layout as the original hammerbeam art), with background bits = 1.
+To keep the firmware small, frame 0 is stored run-length encoded and every later frame
+as the run-length encoded XOR against the frame before it; the firmware rebuilds each
+frame into one RAM buffer as it plays them in order.
 """
 import os
 import numpy as np
@@ -48,37 +50,65 @@ def sprite(rows, x, y):
     return on, off
 
 
-def _c_frames(frames, name):
-    out = []
-    for i, f in enumerate(frames, 1):
-        # Same convention as the original hammerbeam art and the rest of the shield:
-        # background = palette index 1 (white by default, black with
-        # CONFIG_NICE_VIEW_WIDGET_INVERTED=y), drawing = index 0.
-        stored = np.rot90(~f, k=-1)           # portrait -> stored 140x68 (display rotates it back)
-        rows, cols = stored.shape
-        rb = (cols + 7) // 8
-        packed = np.packbits(np.pad(stored, ((0, 0), (0, rb * 8 - cols))).astype(np.uint8), axis=1)
-        out.append(f"static const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST uint8_t {name}{i}_map[] = {{")
-        out += ["#if CONFIG_NICE_VIEW_WIDGET_INVERTED",
-                "    0xff, 0xff, 0xff, 0xff, /*Color of index 0*/",
-                "    0x00, 0x00, 0x00, 0xff, /*Color of index 1*/",
-                "#else",
-                "    0x00, 0x00, 0x00, 0xff, /*Color of index 0*/",
-                "    0xff, 0xff, 0xff, 0xff, /*Color of index 1*/",
-                "#endif"]
-        for r in packed:
-            out.append("    " + ", ".join(f"0x{b:02x}" for b in r) + ",")
-        out += ["};", "",
-                f"static const lv_img_dsc_t {name}{i} = {{",
-                "    .header.cf = LV_IMG_CF_INDEXED_1BIT,",
-                "    .header.always_zero = 0,",
-                "    .header.reserved = 0,",
-                f"    .header.w = {cols},",
-                f"    .header.h = {rows},",
-                f"    .data_size = {8 + packed.size},",
-                f"    .data = {name}{i}_map,",
-                "};", ""]
+STRIDE = 18                      # bytes per stored row (140 px rounded up to 144)
+FRAME_BYTES = STRIDE * W         # 68 stored rows -> 1224 bytes
+
+
+def stored_bytes(f):
+    """Portrait frame -> the 1224 bytes the firmware draws. Background = 1, as in the
+    original hammerbeam art: palette index 1 is the background colour (black by default
+    on this shield's setup, swapped by CONFIG_NICE_VIEW_WIDGET_INVERTED)."""
+    st = np.rot90(~f, k=-1)                          # (68, 140)
+    st = np.pad(st, ((0, 0), (0, STRIDE * 8 - st.shape[1])))
+    return np.packbits(st.astype(np.uint8), axis=1).ravel()
+
+
+def rle(data):
+    """0x00-0x7F: copy the next (c+1) bytes.  0x80-0xFF: repeat the next byte (c-0x80+2) times."""
+    out = bytearray()
+    i, n = 0, len(data)
+    while i < n:
+        j = i
+        while j < n and j - i < 129 and data[j] == data[i]:
+            j += 1
+        if j - i >= 2:
+            out += bytes([0x80 + (j - i - 2), int(data[i])])
+            i = j
+            continue
+        j = i + 1
+        while j < n and j - i < 128 and not (j + 1 < n and data[j] == data[j + 1]):
+            j += 1
+        out += bytes([j - i - 1]) + bytes(int(x) for x in data[i:j])
+        i = j
+    return bytes(out)
+
+
+def unrle(blob, prev=None):
+    """Reference decoder (mirrors nv_anim.c); used to self-check every export."""
+    out = np.zeros(FRAME_BYTES, np.uint8) if prev is None else prev.copy()
+    i = p = 0
+    while p < len(blob):
+        c = blob[p]; p += 1
+        if c & 0x80:
+            n, v = (c & 0x7F) + 2, blob[p]; p += 1
+            seg = np.full(n, v, np.uint8)
+        else:
+            n = c + 1
+            seg = np.frombuffer(blob[p:p + n], np.uint8); p += n
+        out[i:i + n] = seg if prev is None else out[i:i + n] ^ seg
+        i += n
+    assert i == FRAME_BYTES
     return out
+
+
+def encode(frames):
+    raw = [stored_bytes(f) for f in frames]
+    blobs = [rle(raw[0])] + [rle(raw[k] ^ raw[k - 1]) for k in range(1, len(raw))]
+    cur = None
+    for k, b in enumerate(blobs):                    # verify round trip, in playing order
+        cur = unrle(b) if k == 0 else unrle(b, cur)
+        assert np.array_equal(cur, raw[k]), f"frame {k} does not round-trip"
+    return blobs
 
 
 def export(name, frames, c_dir, preview_dir, preview_ms=150):
@@ -102,21 +132,35 @@ def export(name, frames, c_dir, preview_dir, preview_ms=150):
 
     n = len(frames)
     up = name.upper()
+    blobs = encode(frames)
+    data = b"".join(blobs)
+    offs = [0]
+    for b in blobs:
+        offs.append(offs[-1] + len(b))
     c = ["/*",
-         f" * {name}: {n} frames, 68x140 portrait, stored rotated as 140x68 LV_IMG_CF_INDEXED_1BIT.",
+         f" * {name}: {n} frames, 68x140 portrait. {len(data)} bytes compressed",
+         f" * ({n * (FRAME_BYTES + 8)} bytes as plain images). Format: see nv_anim.h.",
          " * Generated by tools/animations - edit the generator, not this file.",
          " */", "",
-         "#include <lvgl.h>", f'#include "{name}.h"', "",
-         "#ifndef LV_ATTRIBUTE_MEM_ALIGN", "#define LV_ATTRIBUTE_MEM_ALIGN", "#endif",
-         "#ifndef LV_ATTRIBUTE_LARGE_CONST", "#define LV_ATTRIBUTE_LARGE_CONST", "#endif", ""]
-    c += _c_frames(frames, name)
-    c.append("/* Pointer table lives in flash too (const pointers to const descriptors). */")
-    c.append(f"const lv_img_dsc_t *const {name}_imgs[{up}_FRAME_COUNT] = {{")
-    c += [f"    &{name}{i}," for i in range(1, n + 1)]
-    c.append("};")
+         f'#include "{name}.h"', "",
+         f"static const uint8_t {name}_data[{len(data)}] = {{"]
+    for k in range(0, len(data), 18):
+        c.append("    " + ", ".join(f"0x{x:02x}" for x in data[k:k + 18]) + ",")
+    c += ["};", "",
+          f"static const uint32_t {name}_offsets[{n + 1}] = {{"]
+    for k in range(0, n + 1, 8):
+        c.append("    " + ", ".join(str(o) for o in offs[k:k + 8]) + ",")
+    c += ["};", "",
+          f"const struct nv_anim {name}_anim = {{",
+          f"    .count = {up}_FRAME_COUNT,",
+          f"    .frame_ms = {up}_FRAME_MS,",
+          f"    .data = {name}_data,",
+          f"    .offsets = {name}_offsets,",
+          "};"]
     with open(os.path.join(c_dir, f"{name}.c"), "w") as fh:
         fh.write("\n".join(c) + "\n")
     with open(os.path.join(c_dir, f"{name}.h"), "w") as fh:
-        fh.write(f"#pragma once\n\n#include <lvgl.h>\n\n#define {up}_FRAME_COUNT {n}\n"
+        fh.write(f'#pragma once\n\n#include "nv_anim.h"\n\n#define {up}_FRAME_COUNT {n}\n'
                  f"#define {up}_FRAME_MS {preview_ms}\n\n"
-                 f"extern const lv_img_dsc_t *const {name}_imgs[{up}_FRAME_COUNT];\n")
+                 f"extern const struct nv_anim {name}_anim;\n")
+    return len(data)
