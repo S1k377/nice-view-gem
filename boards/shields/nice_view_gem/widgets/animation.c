@@ -134,7 +134,9 @@ static void anim_activity_update_cb(struct anim_activity_state state) {
 }
 
 static struct anim_activity_state anim_activity_get_state(const zmk_event_t *eh) {
-    const struct zmk_activity_state_changed *ev = as_zmk_activity_state_changed(eh);
+    /* eh is NULL on the initial refresh; as_zmk_*() must not be called with NULL. */
+    const struct zmk_activity_state_changed *ev =
+        (eh != NULL) ? as_zmk_activity_state_changed(eh) : NULL;
     enum zmk_activity_state s = (ev != NULL) ? ev->state : zmk_activity_get_state();
     return (struct anim_activity_state){.active = (s == ZMK_ACTIVITY_ACTIVE)};
 }
