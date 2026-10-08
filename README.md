@@ -75,9 +75,9 @@ The 68x140 art area plays looping animations:
 | ------------ | -------------------------------------------- | ------ | ----------- |
 | Campfire     | Slideshow, both halves                       | 32     | 150 ms      |
 | Starry night | Slideshow, both halves                       | 32     | 250 ms      |
-| Astronaut    | Slideshow, both halves                       | 36     | 200 ms      |
-| Tree         | Slideshow, both halves                       | 48     | 400 ms      |
-| Cat          | Slideshow, both halves                       | 44     | 140 ms      |
+| Astronaut    | Slideshow, both halves                       | 36     | 180 ms      |
+| Tree         | Slideshow, both halves                       | 40     | 180 ms      |
+| Cat          | Slideshow, both halves                       | 44     | 120 ms      |
 | Spells       | Left half, while the "Tibia" layer is active | 48     | 170 ms      |
 
 Each half starts on a random slide and moves to a random different one every 5 minutes. Only the central half knows the active layers in a ZMK split, so the layer animation lives on the left.

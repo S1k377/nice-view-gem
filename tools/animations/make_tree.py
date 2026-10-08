@@ -1,55 +1,39 @@
-"""A seed sprouts and slowly grows into a tree: the trunk rises, branches split, the canopy
-fills in and sways under a turning sun; leaves drift down, a seed falls, and the tree fades
-away leaving that seed, which starts the loop again. 48 frames, played slowly."""
+"""A great old tree in the wind: a broad trunk with spreading roots, big limbs and a heavy
+canopy of leaf clumps that sway in waves, leaves blowing off across the screen, grass
+bending in the gusts. 40 frames, seamless."""
 import math, os, random
 import numpy as np
 from nvlib import W, H, xx, yy, BAYER, disc, thick_line, export
 
-N = 48
-FRAME_MS = 400
+N = 40
+FRAME_MS = 180
 TAU = 2 * math.pi
-GROUND = 126
-SEED = (34, GROUND - 1)
-
-rng = random.Random(3)
-
-# ---- tree structure: (x0, y0, x1, y1, width, start, depth), grown in growth-time g in 0..1
-BRANCHES = []
-BLOBS = []                          # leaf clumps: (x, y, radius, start)
-DUR = 0.24
+GROUND = 127
 NOISE = np.random.RandomState(9).rand(H, W)
 
+rng = random.Random(5)
 
-def grow(x, y, ang, length, width, start, depth):
-    x1, y1 = x + math.cos(ang) * length, y + math.sin(ang) * length
-    BRANCHES.append([x, y, x1, y1, width, start, depth])
-    if depth >= 2:                   # a clump of small leaf blobs around each outer branch tip
-        for _ in range(4 + depth * 2):
-            a = rng.uniform(0, TAU)
-            d = rng.uniform(0, 7.5)
-            BLOBS.append([x1 + math.cos(a) * d * 1.15, y1 + math.sin(a) * d * 0.85 - 1.5,
-                          rng.uniform(3.0, 4.6), start + DUR + rng.uniform(0.0, 0.16)])
-    if depth == 4:
-        return
-    n = 2 if depth < 1 else rng.choice((2, 3))
-    spread = math.radians(25 + depth * 3)
-    for i in range(n):
-        f = (i / (n - 1)) - 0.5 if n > 1 else 0
-        a2 = ang + f * 2 * spread + math.radians(rng.uniform(-7, 7))
-        grow(x1, y1, a2, length * rng.uniform(0.64, 0.74), width * 0.62, start + 0.19, depth + 1)
+# limbs: (x0, y0, x1, y1, width at base, width at tip)
+LIMBS = [
+    (34, GROUND, 34, 84, 11, 7.5),     # trunk
+    (34, 90, 14, 62, 7, 3.5),          # big left limb
+    (34, 88, 55, 60, 7, 3.5),          # big right limb
+    (34, 86, 31, 50, 6, 3),            # centre leader
+    (20, 70, 8, 58, 3.2, 1.6),
+    (49, 68, 61, 57, 3.2, 1.6),
+    (32, 62, 22, 40, 3.2, 1.6),
+    (33, 60, 46, 38, 3.2, 1.6),
+]
 
+# leaf clumps (x, y, radius), placed by hand for a broad oak-like crown
+CLUMPS = [(34, 18, 11), (20, 25, 10), (48, 25, 10), (9, 40, 8.5), (59, 40, 8.5),
+          (27, 36, 10), (42, 35, 10), (16, 51, 9.5), (52, 50, 9.5), (34, 50, 9),
+          (7, 60, 6.5), (61, 60, 6.5), (24, 63, 7.5), (44, 63, 7.5)]
+CLUMPS = [(x, y, r, rng.uniform(0, TAU)) for x, y, r in CLUMPS]
+CLUMPS.sort(key=lambda c: c[1])            # draw top ones first, lower ones in front
 
-grow(34, GROUND, -math.pi / 2, 36, 7.5, 0.0, 0)
-
-# keep the grown tree inside the screen: squeeze x around the trunk if needed
-_minx = min(min(bx - r for bx, by, r, s in BLOBS), min(min(b[0], b[2]) for b in BRANCHES))
-_maxx = max(max(bx + r for bx, by, r, s in BLOBS), max(max(b[0], b[2]) for b in BRANCHES))
-_k = min(1.0, 28.0 / max(34 - _minx, _maxx - 34))
-for b in BRANCHES:
-    b[0], b[2] = 34 + (b[0] - 34) * _k, 34 + (b[2] - 34) * _k
-for bl in BLOBS:
-    bl[0] = 34 + (bl[0] - 34) * _k
-LEAVES = [(rng.uniform(12, 56), rng.uniform(45, 80), rng.random()) for _ in range(5)]
+LEAVES = [(rng.uniform(0, 1), rng.uniform(20, 110), rng.uniform(0, TAU)) for _ in range(5)]
+GRASS = [(x, rng.uniform(3, 6)) for x in range(3, W - 2, 3)]
 
 
 def dilate(m):
@@ -63,111 +47,79 @@ def erode(m):
     return ~dilate(~m)
 
 
-def growth(t):
-    """Growth-time g for frame t: nothing before frame 4, full at frame 31."""
-    if t < 4:
-        return None
-    return min(1.0, (t - 4) / 27)
+def wind(t):
+    """Gust strength 0..1: a strong gust then a calm, once per loop."""
+    return 0.55 + 0.45 * math.sin(TAU * t / N)
 
 
-def sway(x, y, t):
-    """Horizontal sway that increases with height; zero while the tree is small."""
-    k = ((GROUND - y) / 90.0) ** 2
-    return x + 1.6 * k * math.sin(TAU * t / 16)
-
-
-def tree_mask(t, g):
-    wood = np.zeros((H, W), bool)
-    for x0, y0, x1, y1, w, start, depth in BRANCHES:
-        f = (g - start) / DUR
-        if f <= 0:
-            continue
-        f = min(f, 1.0)
-        ex, ey = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
-        ww = max(1.2, w * (0.3 + 0.7 * g))
-        wood |= thick_line(sway(x0, y0, t), y0, sway(ex, ey, t), ey, ww)
-    leaves = np.zeros((H, W), bool)
-    for cx, cy, r, start in BLOBS:
-        f = (g - start) / 0.12
-        if f <= 0:
-            continue
-        leaves |= disc(sway(cx, cy, t), cy, r * min(f, 1.0))
-    return wood, leaves
-
-
-def sun(img, t):
-    cx, cy, r = 54, 15, 5.5
-    img |= disc(cx, cy, r)
-    a0 = TAU * (t / N) / 8                                 # 8 rays turn 1/8 per loop
-    for k in range(8):
-        a = a0 + TAU * k / 8
-        img |= thick_line(cx + math.cos(a) * (r + 2.5), cy + math.sin(a) * (r + 2.5),
-                          cx + math.cos(a) * (r + 5.5), cy + math.sin(a) * (r + 5.5), 1.4)
+def sway(x, y, t, ph=0.0):
+    """Horizontal push for a point at height y: grows with height, travels as a wave."""
+    k = max(0.0, (GROUND - y) / 100.0) ** 1.6
+    return x + k * (3.6 * wind(t) - 1.2 + 1.6 * math.sin(TAU * t * 2 / N - y * 0.06 + ph))
 
 
 def frame(t):
     img = np.zeros((H, W), bool)
-    sun(img, t)
 
-    # ground: soil line, a gentle mound, tufts of grass
-    mound = (yy >= GROUND) & (yy >= GROUND + 3 - 3 * np.exp(-((xx - 34) / 10.0) ** 2))
-    img |= (yy == GROUND) | ((yy > GROUND) & (BAYER < 0.07))
-    img |= mound & (yy > GROUND) & (BAYER < 0.2)
-    for gx in (6, 15, 50, 61):
-        for k, dx in enumerate((-2, 0, 2)):
-            img |= thick_line(gx, GROUND, gx + dx, GROUND - 3 - (k == 1) * 2, 1)
+    # trunk and limbs, tapering, swaying with height
+    wood = np.zeros((H, W), bool)
+    for x0, y0, x1, y1, w0, w1 in LIMBS:
+        n = 8
+        for i in range(n):
+            a, b = i / n, (i + 1) / n
+            ya, yb = y0 + (y1 - y0) * a, y0 + (y1 - y0) * b
+            xa, xb = sway(x0 + (x1 - x0) * a, ya, t), sway(x0 + (x1 - x0) * b, yb, t)
+            wood |= thick_line(xa, ya, xb, yb, w0 + (w1 - w0) * (a + b) / 2)
+    # roots flaring into the ground
+    for rx, s in ((22, -1), (46, 1), (28, -1), (40, 1)):
+        wood |= thick_line(34 + s * 4, GROUND - 7, rx, GROUND + 1, 3.5)
 
-    g = growth(t)
-    fade = 0.0 if t < 44 else (t - 43) / 4.0              # frames 44..47 dissolve the tree
-    if g is None or fade >= 1:
-        # the seed resting in the soil, cracking open just before it sprouts
-        sx, sy = SEED
-        seed = ((xx - sx) / 2.6) ** 2 + ((yy - sy) / 1.8) ** 2 <= 1
-        img &= ~dilate(seed)
-        img |= seed
-        if t in (2, 3):
-            img[sy - 1:sy + 1, sx] = False
-            img[sy - 2, sx - 1] = img[sy - 3, sx] = True
-    else:
-        wood, leaves = tree_mask(t, g)
-        if g < 0.3:                                       # sprout leaves on the young stem
-            tip_y = GROUND - 36 * min(1.0, g / DUR)
-            sz = min(1.0, g * 8) * (1 - max(0.0, g - 0.2) / 0.1)
-            if sz > 0.05:
-                for side in (-1, 1):
-                    c, sn = math.cos(-side * 0.5), math.sin(-side * 0.5)
-                    lx0, ly0 = 34 + side * 3.6 * sz, tip_y - 1.2 * sz
-                    u = (xx - lx0) * c + (yy - ly0) * sn
-                    v = -(xx - lx0) * sn + (yy - ly0) * c
-                    leaves |= (u / (3.8 * sz + 0.01)) ** 2 + (v / (1.7 * sz + 0.01)) ** 2 <= 1
-        bark = wood & ~erode(erode(wood)) | (wood & ((yy * 2 + (xx % 3)) % 7 == 0))
-        wood_px = wood & ~(erode(erode(wood)) & ((xx + yy // 3) % 4 == 0))   # bark grooves
-        canopy = (leaves & ~erode(leaves)) | (leaves & (NOISE < 0.36))
-        tree = (wood_px & ~leaves) | canopy
-        if fade > 0:
-            tree &= BAYER >= fade
-        img &= ~dilate(wood | leaves)
-        img |= tree
-        # leaves drifting down once the canopy is full
-        if 32 <= t < 44:
-            for lx, ly, ph in LEAVES:
-                q = ((t - 32) / 12 + ph) % 1.0
-                x = lx + 4 * math.sin(TAU * q * 2 + ph * 6)
-                y = ly + q * (GROUND - ly - 2)
-                img |= ((xx - x) / 1.8) ** 2 + ((yy - y) / 1.0) ** 2 <= 1
-        # a seed falls from the canopy to the ground
-        if 40 <= t < 44:
-            q = (t - 39) / 4
-            y = 60 + (SEED[1] - 60) * q * q
-            x = 38 + (SEED[0] - 38) * q
-            seed = ((xx - x) / 2.6) ** 2 + ((yy - y) / 1.8) ** 2 <= 1
-            img &= ~dilate(seed)
-            img |= seed
-        if t >= 44:
-            sx, sy = SEED
-            seed = ((xx - sx) / 2.6) ** 2 + ((yy - sy) / 1.8) ** 2 <= 1
-            img &= ~dilate(seed)
-            img |= seed
+    # canopy: each clump gets a crisp outline and leafy texture that is denser where the
+    # light hits (upper left); lower clumps overlap the ones behind them
+    canopy = np.zeros((H, W), bool)
+    canopy_area = np.zeros((H, W), bool)
+    for cx, cy, r, ph in CLUMPS:
+        sx = sway(cx, cy, t, ph * 0.3)
+        c = disc(sx, cy, r)
+        lx, ly = (xx - sx) / r, (yy - cy) / r
+        light = np.clip(0.5 - 0.32 * (lx + ly), 0.04, 0.75)
+        canopy &= ~c
+        canopy |= c & (BAYER < light) & ~disc(sx, cy, r - 1.5)
+        canopy |= c & (NOISE < light * 0.9)
+        canopy &= ~(c & ~disc(sx, cy, r - 1.0) ^ c & ~disc(sx, cy, r - 1.0))
+        canopy |= c & ~disc(sx, cy, r - 1.0)                       # outline
+        canopy &= ~(c & disc(sx, cy, r - 1.0) & ~disc(sx, cy, r - 2.0))   # gap inside it
+        canopy_area |= c
+
+    # bark: grooves down the trunk and limbs
+    bark = wood & ((((xx * 2 + yy // 4) % 6) == 0) & erode(erode(wood)))
+    img &= ~dilate(wood | canopy_area)
+    img |= wood & ~bark
+    img &= ~canopy_area
+    img |= canopy
+
+    # ground and grass bending with the wind
+    img[GROUND:, :] = False
+    img[GROUND, :] = True
+    img |= (yy > GROUND + 2) & (BAYER < 0.08)
+    img |= wood & (yy >= GROUND - 1) & (yy <= GROUND)
+    for gx, gh in GRASS:
+        if 27 < gx < 41:
+            continue
+        lean = gh * 0.5 * wind(t) + 0.8 * math.sin(TAU * t * 2 / N + gx * 0.3)
+        img |= thick_line(gx, GROUND, gx + lean, GROUND - gh, 1)
+
+    # leaves blowing off and tumbling across the screen
+    for off, y0, ph in LEAVES:
+        q = (t / N + off) % 1.0
+        x = -4 + q * (W + 8)
+        y = y0 + 6 * math.sin(TAU * q * 2 + ph) + q * 10
+        ang = TAU * q * 3 + ph
+        u = (xx - x) * math.cos(ang) + (yy - y) * math.sin(ang)
+        v = -(xx - x) * math.sin(ang) + (yy - y) * math.cos(ang)
+        leaf = (u / 2.4) ** 2 + (v / 1.2) ** 2 <= 1
+        img &= ~(dilate(leaf) & ~leaf)
+        img |= leaf
 
     img[0, :] = img[-1, :] = True
     img[:, 0] = img[:, -1] = True

@@ -1,20 +1,18 @@
-"""Astronaut drifting in space: gentle tilt and bob, one arm waving, a tether snaking off
-screen, a ringed planet turning below, twinkling stars and drifting space dust.
-36 frames, seamless."""
+"""A chunky little astronaut tumbling slowly through space: a round fishbowl helmet with a
+glinting visor and a tiny antenna, a squat suit with stubby arms and legs, doing one full
+roll per loop while it drifts past Saturn. 36 frames, seamless."""
 import math, os, random
 import numpy as np
 from nvlib import W, H, xx, yy, BAYER, disc, export
 
 N = 36
-FRAME_MS = 200
+FRAME_MS = 180
 TAU = 2 * math.pi
 
 rng = random.Random(42)
-STARS = [(rng.randrange(2, W - 2), rng.randrange(2, 100), rng.random(), rng.random() < 0.25)
-         for _ in range(30)]
-DUST_TILE = 36                                   # dust repeats every 36 px and moves 1 px/frame
-DUST = [(rng.randrange(2, W - 2), rng.randrange(0, DUST_TILE)) for _ in range(5)]
-PX, PY, PR = 58, 136, 36                         # planet, mostly below the bottom-right corner
+STARS = [(rng.randrange(2, W - 2), rng.randrange(2, H - 2), rng.random(), rng.random() < 0.25)
+         for _ in range(34)]
+SX, SY, SR = 30, 114, 15        # Saturn, low on the screen
 
 
 def dilate(m):
@@ -28,51 +26,50 @@ def erode(m):
     return ~dilate(~m)
 
 
-class Body:
-    """Shapes in the astronaut's own rotated coordinate frame (origin = chest, -y = up)."""
+class Local:
+    """Pixel coordinates in the astronaut's own frame: origin at its middle, -y = up,
+    rotated by th and scaled by k."""
 
-    def __init__(self, cx, cy, th, scale=1.0):
+    def __init__(self, cx, cy, th, k):
         c, s = math.cos(th), math.sin(th)
-        self.lx = (c * (xx - cx) + s * (yy - cy)) / scale
-        self.ly = (-s * (xx - cx) + c * (yy - cy)) / scale
-        self.cx, self.cy, self.c, self.s, self.k = cx, cy, c, s, scale
-
-    def disc(self, x, y, r):
-        return (self.lx - x) ** 2 + (self.ly - y) ** 2 <= r * r
+        self.x = (c * (xx - cx) + s * (yy - cy)) / k
+        self.y = (-s * (xx - cx) + c * (yy - cy)) / k
 
     def ell(self, x, y, rx, ry):
-        return ((self.lx - x) / rx) ** 2 + ((self.ly - y) / ry) ** 2 <= 1
+        return ((self.x - x) / rx) ** 2 + ((self.y - y) / ry) ** 2 <= 1
 
-    def rect(self, x0, y0, x1, y1):
-        return (self.lx >= x0) & (self.lx <= x1) & (self.ly >= y0) & (self.ly <= y1)
-
-    def line(self, x0, y0, x1, y1, w):
-        dx, dy = x1 - x0, y1 - y0
-        L2 = dx * dx + dy * dy or 1
-        t = np.clip(((self.lx - x0) * dx + (self.ly - y0) * dy) / L2, 0, 1)
-        return (self.lx - x0 - t * dx) ** 2 + (self.ly - y0 - t * dy) ** 2 <= (w / 2) ** 2
-
-    def to_screen(self, x, y):
-        x, y = x * self.k, y * self.k
-        return self.cx + self.c * x - self.s * y, self.cy + self.s * x + self.c * y
+    def rrect(self, x0, y0, x1, y1, r):
+        """Rounded rectangle."""
+        qx = np.maximum(np.maximum(x0 + r - self.x, self.x - (x1 - r)), 0)
+        qy = np.maximum(np.maximum(y0 + r - self.y, self.y - (y1 - r)), 0)
+        return (qx * qx + qy * qy <= r * r) & (self.x >= x0) & (self.x <= x1) & \
+            (self.y >= y0) & (self.y <= y1)
 
 
-def planet(img, p):
-    body = disc(PX, PY, PR)
-    img &= ~dilate(body)
-    # surface bands that slide sideways as it turns (pattern period divides the loop)
-    shift = p * 24
-    band = np.sin((yy - PY) / 3.2 + np.sin((xx + shift) / 7.0) * 0.9)
-    shade = (xx - PX) + (yy - PY) * 0.6                          # lit from the upper left
-    lit = np.clip(0.75 - (shade + PR) / (2.2 * PR), 0.05, 0.75)
-    img |= body & (BAYER < lit) & (band > -0.2)
-    img |= body & ~erode(body) & (shade < 10)
-    # ring: back half hidden behind the planet, front half drawn over it
-    ring = ((xx - PX) / 52.0) ** 2 + ((yy - PY + 6 - (xx - PX) * 0.32) / 9.0) ** 2
-    ring_m = (ring <= 1) & (ring >= 0.8)
-    front = (yy - PY + 6 - (xx - PX) * 0.32) > 0
-    img |= ring_m & (~body | front)
-    img &= ~((ring <= 0.8) & (ring >= 0.68) & front & body)     # gap between ring and planet
+def saturn(img, p):
+    body = disc(SX, SY, SR)
+    tilt = -0.32
+    u = (xx - SX) * math.cos(tilt) + (yy - SY) * math.sin(tilt)
+    v = -(xx - SX) * math.sin(tilt) + (yy - SY) * math.cos(tilt)
+    d = (u / 31.0) ** 2 + (v / 7.5) ** 2
+    ring = (d <= 1.0) & (d >= 0.5)
+    front = v > 0
+    img &= ~dilate(body | ring)
+    # planet: lit from the upper right, with a few cloud bands that drift as it turns
+    shade = -(xx - SX) * 0.7 + (yy - SY)
+    lit = np.clip(0.85 - (shade + SR) / (2.2 * SR), 0.0, 0.85)
+    img |= body & (BAYER < lit)
+    for k, by in enumerate((-6, -1, 5)):
+        wob = 0.8 * math.sin(TAU * p + k * 2)
+        band = np.abs((yy - SY) - by - wob - 0.15 * (xx - SX)) < 0.6
+        img &= ~(body & band)
+    img |= body & ~erode(body) & (shade < 8)
+    # ring: two crisp edges with a dithered middle; hidden behind the planet, over it in front
+    edge = (d <= 1.0) & (d >= 0.86) | (d <= 0.62) & (d >= 0.5)
+    mid = ring & ~edge & (BAYER < 0.35)
+    vis = ~body | front
+    img &= ~(dilate(ring & front) & body & ~ring)
+    img |= (edge | mid) & vis
 
 
 def frame(t):
@@ -86,75 +83,76 @@ def frame(t):
         if big and b > 0.6:
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 img[y + dy, x + dx] = True
-    for x, y in DUST:                                           # drifting dust, seamless
-        for rep in range(-1, H // DUST_TILE + 2):
-            yy0 = (y + t) % DUST_TILE + rep * DUST_TILE
-            if 1 <= yy0 < H - 1:
-                img[yy0, x] = True
 
-    planet(img, p)
+    saturn(img, p)
 
-    # astronaut pose for this frame
-    th = math.radians(9) * math.sin(TAU * p)
-    cx = 33 + 2.5 * math.sin(TAU * p + 1.0)
-    cy = 60 + 3.5 * math.sin(TAU * p)
-    a = Body(cx, cy, th, 1.28)
-    wave = math.sin(TAU * p * 3)
+    # one full spin per loop around his own long axis (like a kebab on a spit): parts on
+    # the front, sides and back slide round the body and hide behind it as he turns
+    th = TAU * p
+    tilt = 0.28 * math.sin(TAU * p) - 0.1                 # the spin axis wobbles a little
+    cx = 34 + 2 * math.sin(TAU * p)
+    cy = 54 + 3 * math.sin(TAU * p * 2)
+    a = Local(cx, cy, tilt, 1.25)
 
-    suit = np.zeros((H, W), bool)
-    dark = np.zeros((H, W), bool)
-    # backpack (life support) peeking out behind the shoulders
-    pack = a.rect(-10, -9, 10, 9)
-    # legs: hips -> knees -> boots, relaxed float
-    kick = 1.5 * math.sin(TAU * p * 2)
-    suit |= a.line(-4, 9, -7, 17 + kick, 5.5) | a.line(-7, 17 + kick, -4, 25 + kick, 5)
-    suit |= a.line(4, 9, 8, 16 - kick, 5.5) | a.line(8, 16 - kick, 7, 24 - kick, 5)
-    suit |= a.rect(-8, 24 + kick, -1, 28 + kick) | a.rect(4, 23 - kick, 11, 27 - kick)   # boots
-    dark |= a.rect(-9, 16 + kick, -4, 16.8 + kick) | a.rect(5, 15 - kick, 10, 15.8 - kick)  # knees
-    # torso with chest control box and belt
-    suit |= a.rect(-8, -6, 8, 11)
-    dark |= a.rect(-4, -1, 4, 5) & ~a.rect(-3, 0, 3, 4)
-    dark |= a.rect(-2.5, 1.5, -1.5, 2.5) | a.rect(1.5, 1.5, 2.5, 2.5)
-    dark |= a.rect(-8, 8, 8, 8.8)
-    # arms: viewer-left arm waves, right arm reaches down toward the tether clip
-    hx, hy = -17 + 2 * wave, -14 - 4 * wave
-    suit |= a.line(-8, -4, -14, -6 - wave, 5) | a.line(-14, -6 - wave, hx, hy, 4.5)
-    suit |= a.disc(hx, hy, 3)
-    suit |= a.line(8, -4, 13, 4, 5) | a.line(13, 4, 11, 11, 4.5) | a.disc(11, 12, 2.8)
-    # helmet with a dark visor and a bright reflection
-    suit |= a.disc(0, -15, 9.5)
-    visor = a.ell(1.5, -14.5, 6.6, 5)
-    dark |= visor
-    shine = a.ell(-1.5, -17, 3.2, 1.6) & ~a.ell(-1.0, -16.2, 3.0, 1.4)
-    dark |= a.disc(0, -15, 9.5) & ~a.disc(0, -15, 8.6) & (a.ly > -12)   # rim shadow
+    def around(angle, radius):
+        """x offset and depth (+ = towards us) of a point at this angle round the body."""
+        return radius * math.sin(th + angle), math.cos(th + angle)
 
-    img &= ~dilate(dilate(suit | pack))
-    img |= pack & ~erode(pack)
-    img |= pack & (BAYER < 0.3)
-    img &= ~dilate(suit)
-    img |= suit
-    img &= ~dark
-    img |= shine & visor
-    img |= visor & a.disc(3.5, -12, 0.9)                         # second glint
+    helmet = a.ell(0, -9, 10, 10)
+    body = a.rrect(-9, -3, 9, 12, 5)
+    lx, ld = around(-0.45, 4.5)
+    rx_, rd = around(0.45, 4.5)
+    leg_l = a.rrect(lx - 3, 10, lx + 3, 19.5, 2.4)
+    leg_r = a.rrect(rx_ - 3, 10, rx_ + 3, 19.5, 2.4)
+    px, pd = around(math.pi, 9.5)                          # air tank on his back
+    pw = 2.4 + 3.6 * abs(math.cos(th))
+    pack = a.rrect(px - pw, -2, px + pw, 9, 2)
+    ax1, ad1 = around(math.pi / 2, 10.5)                   # arms on his sides
+    ax2, ad2 = around(-math.pi / 2, 10.5)
+    arm1 = a.ell(ax1, 3.5, 3.0, 4.4)
+    arm2 = a.ell(ax2, 3.5, 3.0, 4.4)
+    tx, td = around(0.9, 6.5)
+    antenna = (np.abs(a.x - tx) < 0.7) & (a.y > -22) & (a.y < -18)
+    bulb = a.ell(tx, -22.5, 1.8, 1.8)
 
-    # tether from the hip clip, snaking up and off the right edge
-    sx, sy = a.to_screen(11, 12)
-    pts = []
-    for i in range(40):
-        q = i / 39
-        x = sx + q * (W + 6 - sx) + 5 * math.sin(TAU * (q * 1.5 - p)) * q
-        y = sy - q * 70 + 4 * math.sin(TAU * (q * 2 + p)) * q
-        pts.append((x, y))
-    teth = np.zeros((H, W), bool)
-    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-        n = int(max(abs(x1 - x0), abs(y1 - y0))) + 1
-        for j in range(n + 1):
-            X, Y = int(round(x0 + (x1 - x0) * j / n)), int(round(y0 + (y1 - y0) * j / n))
-            if 0 < X < W - 1 and 0 < Y < H - 1:
-                teth[Y, X] = True
-    teth &= ~dilate(suit)
-    img &= ~(dilate(teth) & ~teth)                               # thin dark halo
-    img |= teth
+    # back-to-front: parts facing away first, then the body, then parts facing us
+    parts = [(leg_l, ld), (leg_r, rd), (pack, pd), (arm1, ad1), (arm2, ad2)]
+    order = sorted(parts, key=lambda q: q[1])
+    def stamp(m):
+        nonlocal img
+        img &= ~dilate(m)
+        img |= m
+    shape = helmet | body | leg_l | leg_r | pack | arm1 | arm2 | antenna | bulb
+    img &= ~dilate(dilate(shape))
+    img |= antenna | bulb
+    for m, d in order:
+        if d < 0:
+            stamp(m)
+    stamp(body)
+    stamp(helmet)
+    for m, d in order:
+        if d >= 0:
+            stamp(m)
+
+    # visor on the front of the helmet: slides round and narrows, hidden when facing away
+    vx, vd = around(0, 5.5)
+    if vd > -0.2:
+        vw = 1.2 + 6.0 * max(0.0, math.cos(th))
+        visor = a.ell(vx, -9.5, vw, 6.2) & a.ell(0, -9, 8.6, 8.6)
+        img &= ~visor
+        gx = vx - 0.4 * vw
+        img |= visor & a.ell(gx, -12.5, max(0.8, 0.35 * vw), 1.4)          # glint
+    # belt all the way round; a chest patch on the front
+    img &= ~(body & (np.abs(a.y - 6) < 0.6) & ~(pack & (pd > 0)))
+    cpx, cpd = around(0, 5)
+    if cpd > 0.3:
+        cw = 3 * cpd
+        img &= ~(body & a.rrect(cpx - cw, 0, cpx + cw, 4, 1) & ~a.rrect(cpx - cw + 1, 1, cpx + cw - 1, 3, 0.5))
+    # seams so overlapping parts stay readable
+    for m, d in parts:
+        if d >= 0:
+            img &= ~(dilate(m) & ~m & (body | helmet))
+    img &= ~(leg_l & (np.abs(a.y - 16.5) < 0.6)) & ~(leg_r & (np.abs(a.y - 16.5) < 0.6))
 
     img[0, :] = img[-1, :] = True
     img[:, 0] = img[:, -1] = True
