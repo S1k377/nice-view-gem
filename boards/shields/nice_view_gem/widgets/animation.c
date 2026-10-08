@@ -12,7 +12,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include "../assets/campfire.h"
 #include "../assets/cat.h"
 #include "../assets/night.h"
-#include "../assets/tree.h"
+#include "../assets/waterfall.h"
+#include "../assets/waves.h"
 
 #define ANIM_IS_CENTRAL (!IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL))
 
@@ -38,8 +39,8 @@ struct anim_set {
 
 /* The random slideshow, on both halves. */
 static const struct anim_set slides[] = {
-    ANIM_SET(campfire, CAMPFIRE), ANIM_SET(night, NIGHT), ANIM_SET(astronaut, ASTRONAUT),
-    ANIM_SET(tree, TREE),         ANIM_SET(cat, CAT),
+    ANIM_SET(campfire, CAMPFIRE), ANIM_SET(night, NIGHT),   ANIM_SET(astronaut, ASTRONAUT),
+    ANIM_SET(cat, CAT),           ANIM_SET(waves, WAVES),   ANIM_SET(waterfall, WATERFALL),
 };
 
 #if ANIM_IS_CENTRAL

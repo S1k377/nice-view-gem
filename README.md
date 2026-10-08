@@ -76,7 +76,8 @@ The 68x140 art area plays looping animations:
 | Campfire     | Slideshow, both halves                       | 32     | 150 ms      |
 | Starry night | Slideshow, both halves                       | 32     | 250 ms      |
 | Astronaut    | Slideshow, both halves                       | 36     | 180 ms      |
-| Tree         | Slideshow, both halves                       | 40     | 180 ms      |
+| Waves        | Slideshow, both halves                       | 32     | 160 ms      |
+| Waterfall    | Slideshow, both halves                       | 32     | 110 ms      |
 | Cat          | Slideshow, both halves                       | 44     | 120 ms      |
 | Spells       | Left half, while the "Tibia" layer is active | 48     | 170 ms      |
 

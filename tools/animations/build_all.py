@@ -13,7 +13,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import make_astronaut, make_campfire, make_cat, make_gaming, make_night, make_tree  # noqa: E402
+import make_astronaut, make_campfire, make_cat, make_gaming, make_night, make_waterfall, make_waves  # noqa: E402
 from nvlib import export  # noqa: E402
 
 ASSETS = os.path.normpath(os.path.join(HERE, "..", "..", "boards", "shields", "nice_view_gem", "assets"))
@@ -23,7 +23,8 @@ ANIMATIONS = [
     ("campfire", make_campfire),     # slideshow
     ("night", make_night),           # slideshow
     ("astronaut", make_astronaut),   # slideshow
-    ("tree", make_tree),             # slideshow
+    ("waves", make_waves),           # slideshow
+    ("waterfall", make_waterfall),   # slideshow
     ("cat", make_cat),               # slideshow
     ("gaming", make_gaming),         # left half, while the "Tibia" layer is active
 ]
