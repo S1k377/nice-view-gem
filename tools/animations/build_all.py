@@ -26,7 +26,7 @@ ANIMATIONS = [
     ("waves", make_waves),           # slideshow
     ("waterfall", make_waterfall),   # slideshow
     ("cat", make_cat),               # slideshow
-    ("gaming", make_gaming),         # left half, while the "Tibia" layer is active
+    ("gaming", make_gaming),         # arcade cabinet; left half, while the "Tibia" layer is active
 ]
 
 

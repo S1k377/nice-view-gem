@@ -79,9 +79,9 @@ The 68x140 art area plays looping animations:
 | Waves        | Slideshow, both halves                       | 32     | 160 ms      |
 | Waterfall    | Slideshow, both halves                       | 32     | 110 ms      |
 | Cat          | Slideshow, both halves                       | 44     | 120 ms      |
-| Spells       | Left half, while the "Tibia" layer is active | 48     | 170 ms      |
+| Arcade       | Left half, while the "Tibia" layer is active | 32     | 120 ms      |
 
-Each half starts on a random slide and moves to a random different one every 5 minutes. Only the central half knows the active layers in a ZMK split, so the layer animation lives on the left.
+Each half starts on a random slide and moves to a random different one every 5 minutes. Only the central half knows the active layers in a ZMK split, so the arcade cabinet (the layer animation) lives on the left.
 
 Battery: one LVGL timer advances the frames and is paused as soon as the half goes idle, and the shield enables `CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE` so ZMK also stops its display tick while idle. The nice!view keeps showing the last frame, so nothing visibly changes. The number of animations does not affect battery, only how often frames are drawn.
 

@@ -49,7 +49,7 @@ config NICE_VIEW_GEM_ANIMATION_SPEED_PCT
     default 100
 
 config NICE_VIEW_GEM_LAYER_ANIMATION_NAME
-    string "Layer name (display-name) that shows the gaming animation on the left half"
+    string "Layer name (display-name) that shows the arcade animation on the left half"
     default "Tibia"
 
 config NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE
