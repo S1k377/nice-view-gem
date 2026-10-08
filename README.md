@@ -64,7 +64,7 @@ Modify the behavior of this shield by adjusting these options in your personal c
 | `CONFIG_NICE_VIEW_GEM_ANIMATION`                | bool   | Animate the art. Set to `n` to show a still frame of a random slide instead.                                                                                     | y       |
 | `CONFIG_NICE_VIEW_GEM_SLIDESHOW_INTERVAL_S`     | int    | Seconds each slideshow animation plays before a random different one takes over. The switch happens at the end of a loop, and only while the half is active.     | 300     |
 | `CONFIG_NICE_VIEW_GEM_ANIMATION_SPEED_PCT`      | int    | Frame time as a percentage of each animation's own pacing. `200` plays everything at half speed and halves the redraws (less battery); `50` doubles the speed. | 100     |
-| `CONFIG_NICE_VIEW_GEM_LAYER_ANIMATION_NAME`     | string | Name (`display-name`) of the layer that shows the spell animation on the left half while it is active anywhere in the layer stack. Empty disables it.           | "Tibia" |
+| `CONFIG_NICE_VIEW_GEM_LAYER_ANIMATION_NAME`     | string | Name (`display-name`) of the layer that shows the arcade animation on the left half while it is active anywhere in the layer stack. Empty disables it.           | "Tibia" |
 | `CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE`  | bool   | Freeze the animation on its current frame when the half goes idle (`CONFIG_ZMK_IDLE_TIMEOUT`, 30 s by default) and resume on the next keypress.                 | y       |
 
 ## Animations
