@@ -6,6 +6,7 @@ import numpy as np
 from nvlib import W, H, xx, yy, BAYER, disc, export
 
 N = 32
+FRAME_MS = 250
 TAU = 2 * math.pi
 MX, MY, MR = 34, 47, 30          # moon spans x 4..64
 

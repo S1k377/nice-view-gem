@@ -36,20 +36,21 @@ config NICE_VIEW_GEM_WPM_FIXED_RANGE_MAX
     default 100
 
 config NICE_VIEW_GEM_ANIMATION
-    bool "Animate the art (n = show a still frame)"
+    bool "Animate the art (n = show a still frame of a random slide)"
     default y
 
-config NICE_VIEW_GEM_ANIMATION_FRAME_MS
-    int "Milliseconds per frame for the campfire (left half, layer 0)"
-    default 150
+config NICE_VIEW_GEM_SLIDESHOW_INTERVAL_S
+    int "Seconds each slideshow animation plays before switching (at the end of its loop)"
+    default 300
 
-config NICE_VIEW_GEM_ANIMATION_LAYER_FRAME_MS
-    int "Milliseconds per frame for the spells (left half, any other layer)"
-    default 170
+config NICE_VIEW_GEM_ANIMATION_SPEED_PCT
+    int "Frame time in percent of each animation's own pacing (200 = half speed, less battery)"
+    range 25 1000
+    default 100
 
-config NICE_VIEW_GEM_ANIMATION_PERIPHERAL_FRAME_MS
-    int "Milliseconds per frame for the starry night (right half)"
-    default 250
+config NICE_VIEW_GEM_LAYER_ANIMATION_NAME
+    string "Layer name (display-name) that shows the gaming animation on the left half"
+    default "Tibia"
 
 config NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE
     bool "Freeze the animation while the keyboard half is idle"

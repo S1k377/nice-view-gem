@@ -1,22 +1,19 @@
-"""Left half (base layer): a cozy campfire. 32 frames, seamless.
-Flickering fire, soft smoke, a cat asleep by the fire (breathing, floating z's),
-quiet stars and a moon."""
+"""Campfire: centered fire on a stack of bark-textured logs with end grain, ringed by stones.
+Soft smoke rises toward a crescent moon. 32 frames, seamless."""
 import math, os, random
 import numpy as np
-from nvlib import W, H, xx, yy, BAYER, disc, rect, thick_line, sprite, export
+from nvlib import W, H, xx, yy, BAYER, disc, export
 
 N = 32
+FRAME_MS = 150
 TAU = 2 * math.pi
-FX, FIRE_BASE = 49, 119
+FX, FIRE_BASE = 34, 116
 rng = random.Random(7)
-STARS = [(x, y, ph) for x, y, ph in ((rng.randrange(3, W - 3), rng.randrange(4, 60), rng.random()) for _ in range(22))
-         if (x - 15) ** 2 + (y - 16) ** 2 > 100]
-TONGUES = [(49, 14, 46, 0.0, 2), (41, 9, 30, 1.7, 3), (57, 8, 31, 3.9, 3), (45, 7, 36, 5.1, 2), (53, 7, 35, 2.4, 2)]
-
-NOISE = np.random.RandomState(1).rand(H, W)
-ZED_S = ["XXX", ".X.", "XXX"]
-ZED_M = ["XXX", "..X", ".X.", "X..", "XXX"]
-ZED_L = ["XXXXX", "...X.", "..X..", ".X...", "XXXXX"]
+STARS = [(x, y, ph) for x, y, ph in ((rng.randrange(3, W - 3), rng.randrange(4, 62), rng.random())
+                                     for _ in range(22))
+         if (x - 53) ** 2 + (y - 16) ** 2 > 100]
+TONGUES = [(34, 14, 48, 0.0, 2), (26, 9, 31, 1.7, 3), (42, 9, 32, 3.9, 3), (30, 7, 38, 5.1, 2),
+           (38, 7, 37, 2.4, 2)]
 
 
 def dilate(m):
@@ -30,11 +27,11 @@ def erode(m):
     return ~dilate(~m)
 
 
-def tongue(cx, hw, h, lean, phase):
+def tongue(cx, hw, h, lean, phase, base=FIRE_BASE):
     m = np.zeros((H, W), bool)
     for i in range(int(h) + 1):
         f = i / h
-        y = FIRE_BASE - i
+        y = base - i
         width = hw * (1 - f ** 1.6) * (0.75 + 0.25 * math.cos(f * 2.2))
         shift = lean * f * f + 2.1 * math.sin(f * 5 + phase) * f
         if 0 <= y < H:
@@ -42,28 +39,30 @@ def tongue(cx, hw, h, lean, phase):
     return m
 
 
-def cat(t):
-    """Curled-up sleeping cat facing the fire, on the left. Breathes once per 16 frames."""
-    breath = 0.9 * math.sin(TAU * t / 16)
-    hy = 121 - breath * 0.6
-    body = ((xx - 15) / 14.0) ** 2 + ((yy - 127) / (7.0 + breath)) ** 2 <= 1
-    body &= yy <= 133
-    head = disc(27, hy, 6.3)
-    ear1 = (yy >= hy - 9.5) & (yy <= hy - 3) & (np.abs(xx - 23.5) <= (yy - (hy - 9.5)) * 0.65)
-    ear2 = (yy >= hy - 9) & (yy <= hy - 3) & (np.abs(xx - 31) <= (yy - (hy - 9)) * 0.65)
-    tail = np.zeros((H, W), bool)
-    for i in range(13):                                  # tail wrapped around the front
-        a = math.pi * (0.15 + i / 15)
-        tail |= disc(16 + 14 * math.cos(a), 129 + 4.6 * math.sin(a), 2.3)
-    shape = body | head | ear1 | ear2 | tail
-    fill = shape.copy()
-    tail_edge = dilate(tail) & body & ~tail              # separate the tail from the body
-    fill &= ~tail_edge
-    ey = int(round(hy))
-    eyes = (((yy == ey) & (((xx >= 23) & (xx <= 25)) | ((xx >= 28) & (xx <= 30))))
-            | ((yy == ey - 1) & ((xx == 22) | (xx == 31))))                 # closed, curved
-    nose = (yy == ey + 2) & (xx >= 26) & (xx <= 27)
-    return shape, fill & ~eyes & ~nose, eyes
+def log(img, x0, y0, x1, y1, w):
+    """A log seen at an angle: clean outline, one dashed bark groove, a knot, and the cut
+    end at (x0, y0) facing the viewer with growth rings."""
+    dx, dy = x1 - x0, y1 - y0
+    L = math.hypot(dx, dy)
+    ux, uy = dx / L, dy / L
+    u = (xx - x0) * ux + (yy - y0) * uy               # along the log
+    v = -(xx - x0) * uy + (yy - y0) * ux              # across the log
+    body = (u >= 0) & (u <= L) & (np.abs(v) <= w / 2)
+    img &= ~dilate(body)
+    img |= body & ~erode(body)
+    img |= body & (np.abs(v) < 0.6) & ((u % 8) < 5) & (u > w * 0.6)        # bark groove
+    img |= body & (np.abs(np.abs(v) - w * 0.3) < 0.5) & (((u + 4) % 11) < 3) & (u > w * 0.6)
+    kxp, kyp = x0 + ux * L * 0.62 + uy * w * 0.2, y0 + uy * L * 0.62 - ux * w * 0.2
+    img &= ~disc(kxp, kyp, 1.7)
+    img |= disc(kxp, kyp, 1.7) & ~disc(kxp, kyp, 0.8)                     # knot
+    r = w / 2 + 0.5                                                         # cut face
+    face = ((xx - x0) / (r * 0.78)) ** 2 + ((yy - y0) / r) ** 2 <= 1
+    img &= ~dilate(face)
+    img |= face
+    rings = ((xx - x0) / (r * 0.78)) ** 2 + ((yy - y0) / r) ** 2
+    img &= ~((rings > 0.62) & (rings < 0.82))                               # dark growth ring
+    img &= ~((rings > 0.18) & (rings < 0.32))
+    return body
 
 
 def frame(t):
@@ -71,26 +70,24 @@ def frame(t):
     img = np.zeros((H, W), bool)
 
     # moon + stars
-    img |= disc(15, 16, 7) & ~disc(18, 14, 6)
+    img |= disc(53, 16, 7) & ~disc(56, 14, 6)
     for sx, sy, ph in STARS:
-        b = math.sin(TAU * (p * 2 + ph))
-        if b > -0.4:
+        if math.sin(TAU * (p * 2 + ph)) > -0.4:
             img[sy, sx] = True
 
-    # soft smoke wisps (thin dithered ribbons that sway and fade)
+    # smoke ribbons
     for k in range(3):
         for i in range(27):
             q = i / 27
-            y = 76 - i * 2.6
-            x = FX - 2 + 6 * math.sin(TAU * (p * 2 - q * 1.2) + k * 2.1) * (0.4 + q)
+            y = 70 - i * 2.4
+            x = FX + 6 * math.sin(TAU * (p * 2 - q * 1.2) + k * 2.1) * (0.4 + q)
             if (i + k + t) % 3 != 0 and q < 1 - k * 0.15:
-                r = 1.0 + q * 2.6
-                img |= disc(x + k * 2 - 2, y, r) & (BAYER < 0.55 * (1 - q))
+                img |= disc(x + k * 2 - 2, y, 1.0 + q * 2.6) & (BAYER < 0.55 * (1 - q))
 
-    # ground
-    img[134:, :] = False
-    img[134, :] = True
-    img |= (yy > 135) & (BAYER < 0.18)
+    # ground with a little ash under the fire
+    img[131:, :] = False
+    img[131, :] = True
+    img |= (yy > 132) & (BAYER < 0.12)
 
     # flames
     flame = np.zeros((H, W), bool)
@@ -104,36 +101,25 @@ def frame(t):
     img &= ~dilate(flame)
     img |= flame
     img &= ~core
-    img |= tongue(FX, 4, 11 + 3 * math.sin(TAU * p * 3), 1.8 * math.sin(TAU * p * 2), TAU * p * 2) & core
+    img |= tongue(FX, 4, 12 + 3 * math.sin(TAU * p * 3), 1.8 * math.sin(TAU * p * 2), TAU * p * 2) & core
 
-    # logs (crossed) with end rings
-    logs = np.zeros((H, W), bool)
-    inner = np.zeros((H, W), bool)
-    for (x0, y0, x1, y1) in ((37, 129, 61, 116), (37, 116, 61, 129)):
-        logs |= thick_line(x0, y0, x1, y1, 9)
-        inner |= thick_line(x0, y0, x1, y1, 5)
-    img &= ~dilate(dilate(logs))
-    img |= logs & ~inner
-    img |= inner & ((xx + yy) % 5 == 0)
-    for cx, cy in ((37, 116), (37, 129), (61, 116), (61, 129)):
-        img &= ~disc(cx, cy, 4.5)
-        img |= disc(cx, cy, 4.5) & ~disc(cx, cy, 3.3)
-        img |= disc(cx, cy, 1)
-    for i, (ex, ey) in enumerate(((43, 125), (49, 123), (55, 126))):     # embers in the bed
+    # two front logs leaning in, cut ends toward the viewer
+    log(img, 11, 125, 43, 107, 10)
+    log(img, 57, 125, 25, 107, 10)
+
+    # glowing embers between the logs
+    for i, (ex, ey) in enumerate(((28, 124), (33, 126), (39, 124), (31, 128), (36, 128))):
         if math.sin(TAU * (p * 3 + i * 0.37)) > -0.3:
-            img[ey, ex:ex + 3] = True
+            img[ey, ex:ex + 2] = True
 
-    # sleeping cat on the left + floating z's
-    shape, fill, eyes = cat(t)
-    img &= ~dilate(dilate(shape))
-    img |= fill
-    for k in range(2):
-        q = (p * 2 + k * 0.5) % 1.0
-        if q < 0.85:
-            z = ZED_S if q < 0.3 else (ZED_M if q < 0.6 else ZED_L)
-            on, _ = sprite(z, int(19 + q * 8), int(104 - q * 36))
-            img &= ~dilate(on)
-            img |= on
+    # stone ring in front
+    for sx, sy, rx, ry in ((5, 136, 3.4, 2.4), (13, 135, 4.2, 3.0), (22, 136.5, 3.0, 2.0),
+                           (31, 135.5, 4.6, 2.6), (41, 136, 3.4, 2.4), (50, 135, 4.4, 3.0),
+                           (60, 136, 4.0, 2.4)):
+        stone = ((xx - sx) / rx) ** 2 + ((yy - sy) / ry) ** 2 <= 1
+        img &= ~dilate(stone)
+        img |= stone & ~erode(stone)
+        img |= stone & (yy < sy - ry * 0.3) & (xx < sx) & (BAYER < 0.4)    # moonlit top
 
     img[0, :] = img[-1, :] = True
     img[:, 0] = img[:, -1] = True

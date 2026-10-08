@@ -117,5 +117,6 @@ def export(name, frames, c_dir, preview_dir, preview_ms=150):
     with open(os.path.join(c_dir, f"{name}.c"), "w") as fh:
         fh.write("\n".join(c) + "\n")
     with open(os.path.join(c_dir, f"{name}.h"), "w") as fh:
-        fh.write(f"#pragma once\n\n#include <lvgl.h>\n\n#define {up}_FRAME_COUNT {n}\n\n"
+        fh.write(f"#pragma once\n\n#include <lvgl.h>\n\n#define {up}_FRAME_COUNT {n}\n"
+                 f"#define {up}_FRAME_MS {preview_ms}\n\n"
                  f"extern const lv_img_dsc_t *const {name}_imgs[{up}_FRAME_COUNT];\n")

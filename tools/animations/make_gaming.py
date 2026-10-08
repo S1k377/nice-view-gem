@@ -8,6 +8,7 @@ import numpy as np
 from nvlib import W, H, xx, yy, BAYER, disc, rect, thick_line, export
 
 N = 48
+FRAME_MS = 170
 TAU = 2 * math.pi
 
 

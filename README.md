@@ -61,24 +61,30 @@ Modify the behavior of this shield by adjusting these options in your personal c
 | ------------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `CONFIG_NICE_VIEW_GEM_WPM_FIXED_RANGE`     | bool | This shield uses a fixed range for the chart and gauge deflection. If you set this option to `n`, it will switch to a dynamic range, like the default nice!view shield, which dynamically adjusts based on the last 10 WPM values provided by ZMK.                | y       |
 | `CONFIG_NICE_VIEW_GEM_WPM_FIXED_RANGE_MAX` | int  | You can adjust the maximum value of the fixed range to align with your current goal.                                                                                                                                                                              | 100     |
-| `CONFIG_NICE_VIEW_GEM_ANIMATION`                   | bool | Animate the art. Set to `n` to show a still frame instead (the set still switches with the layer on the left half).                                                                                                                                           | y       |
-| `CONFIG_NICE_VIEW_GEM_ANIMATION_FRAME_MS`            | int  | Milliseconds per frame for the campfire (left half, layer 0). Higher is slower and uses less battery.                                                                                                                                                         | 150     |
-| `CONFIG_NICE_VIEW_GEM_ANIMATION_PERIPHERAL_FRAME_MS` | int  | Milliseconds per frame for the starry night on the right half.                                                                                                                                                                                                | 250     |
-| `CONFIG_NICE_VIEW_GEM_ANIMATION_LAYER_FRAME_MS`    | int  | Milliseconds per frame for the spell animation shown on the left half when any layer other than 0 is active.                                                                                                                                                  | 170     |
-| `CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE`     | bool | Freeze the animation on its current frame when the half goes idle (`CONFIG_ZMK_IDLE_TIMEOUT`, 30 s by default) and resume on the next keypress. Keeps the display from redrawing while you are away.                                                         | y       |
+| `CONFIG_NICE_VIEW_GEM_ANIMATION`                | bool   | Animate the art. Set to `n` to show a still frame of a random slide instead.                                                                                     | y       |
+| `CONFIG_NICE_VIEW_GEM_SLIDESHOW_INTERVAL_S`     | int    | Seconds each slideshow animation plays before a random different one takes over. The switch happens at the end of a loop, and only while the half is active.     | 300     |
+| `CONFIG_NICE_VIEW_GEM_ANIMATION_SPEED_PCT`      | int    | Frame time as a percentage of each animation's own pacing. `200` plays everything at half speed and halves the redraws (less battery); `50` doubles the speed. | 100     |
+| `CONFIG_NICE_VIEW_GEM_LAYER_ANIMATION_NAME`     | string | Name (`display-name`) of the layer that shows the spell animation on the left half while it is active anywhere in the layer stack. Empty disables it.           | "Tibia" |
+| `CONFIG_NICE_VIEW_GEM_ANIMATION_PAUSE_ON_IDLE`  | bool   | Freeze the animation on its current frame when the half goes idle (`CONFIG_ZMK_IDLE_TIMEOUT`, 30 s by default) and resume on the next keypress.                 | y       |
 
 ## Animations
 
-The 68x140 art area plays a looping animation:
+The 68x140 art area plays looping animations:
 
-| Half          | Layer 0          | Any other layer                       |
-| ------------- | ---------------- | ------------------------------------- |
-| Left (central)  | Campfire         | Spells: fireball → lightning → thorns |
-| Right (peripheral) | Starry night | Starry night                          |
+| Animation    | Where                                        | Frames | Pacing      |
+| ------------ | -------------------------------------------- | ------ | ----------- |
+| Campfire     | Slideshow, both halves                       | 32     | 150 ms      |
+| Starry night | Slideshow, both halves                       | 32     | 250 ms      |
+| Astronaut    | Slideshow, both halves                       | 36     | 200 ms      |
+| Tree         | Slideshow, both halves                       | 48     | 400 ms      |
+| Cat          | Slideshow, both halves                       | 44     | 140 ms      |
+| Spells       | Left half, while the "Tibia" layer is active | 48     | 170 ms      |
 
-Only the central half knows the active layer in a ZMK split, so the layer-dependent animation lives on the left. Each half only links the frames it shows.
+Each half starts on a random slide and moves to a random different one every 5 minutes. Only the central half knows the active layers in a ZMK split, so the layer animation lives on the left.
 
-The frames are generated by the Python scripts in `tools/animations/` (numpy + Pillow). After editing one, run `python3 tools/animations/build_all.py` to rewrite `boards/shields/nice_view_gem/assets/{campfire,gaming,night}.{c,h}` and refresh the previews in `tools/animations/preview/`.
+Battery: one LVGL timer advances the frames and is paused as soon as the half goes idle, and the shield enables `CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE` so ZMK also stops its display tick while idle. The nice!view keeps showing the last frame, so nothing visibly changes. The number of animations does not affect battery, only how often frames are drawn.
+
+The frames are generated by the Python scripts in `tools/animations/` (numpy + Pillow); each `make_<name>.py` defines its frame count, pacing and drawing. After editing one, run `python3 tools/animations/build_all.py` to rewrite the `.c`/`.h` files in `boards/shields/nice_view_gem/assets/` and refresh the previews in `tools/animations/preview/`.
 
 ## Credits
 
